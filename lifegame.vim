@@ -7,107 +7,119 @@ let s:HEIGHT = 20
 let s:FPS = 60
 let s:MAX_ITERATION = 10000
 
-let s:LIVE = '1'
-let s:DEAD = '0'
-let s:SENTINEL = '|'
+let s:CELL = 'c'
+let s:EMPTY = '.'
 
 function! s:initialize()
-    new
+    tabnew
     setlocal filetype=lifegame buftype=nofile
     setlocal nolist nocursorline nonumber norelativenumber nowrap
 
     let s:WIDTH = winwidth(winnr())
     let s:HEIGHT = winheight(winnr())
 
-    execute 'syntax match LifeGameDead "' . s:DEAD . '"'
-    execute 'syntax match LifeGameLive "' . s:LIVE  . '"'
+    execute 'syntax match LifeGameDead "' . s:EMPTY . '"'
+    execute 'syntax match LifeGameLive "' . s:CELL  . '"'
     highlight LifeGameLive ctermfg=Green ctermbg=Green guifg=#00ff00 guibg=#00ff00
     highlight LifeGameDead ctermfg=Black ctermbg=Black guifg=#000000 guibg=#000000
 endfunction
 
-function! s:random()
-    " http://stackoverflow.com/a/12739441
-    return str2nr(matchstr(reltimestr(reltime()), '\v\.@<=\d+')[1:])
+function! s:fuzzy_random()
+    return reltime()[1]
 endfunction
 
 function! s:generate_random_board(width, height)
-    let cells = [s:LIVE, s:DEAD]
-    let board = []
-    for y in range(a:height)
-        for x in range(a:width-1)
-            let cell = cells[s:random() % len(cells)]
-            call add(board, cell)
-        endfor
-        call add(board, s:SENTINEL)
+    let board = {}
+    for i in range(a:height * a:width)
+        if (s:fuzzy_random() % 2) == 0
+            let board[i] = s:CELL
+        endif
     endfor
     return board
 endfunction
 
-function! s:show_board(board)
-    for y in range(s:HEIGHT)
-        let begin = s:get_position(0, y)
-        let end = s:get_position(s:WIDTH - 1, y)
-        call setline(y+1, join(a:board[begin : end], ''))
-    endfor
-endfunction
-
-function! s:exist_cell(cell)
-    return a:cell == s:LIVE
-endfunction
-
 function! s:get_position(x, y)
-    "return a:y * (s:WIDTH + 1) + a:x " 横幅は番兵分+ 1
-    return a:y * s:WIDTH + a:x
+    return a:x + (a:y * (s:WIDTH))
 endfunction
 
-function! s:count_neighbors(board, x, y)
-    let target = [
-        \ s:get_position(a:x - 1, a:y - 1), s:get_position(a:x, a:y - 1), s:get_position(a:x + 1, a:y - 1),
-        \ s:get_position(a:x - 1, a:y)    ,                               s:get_position(a:x + 1, a:y),
-        \ s:get_position(a:x - 1, a:y + 1), s:get_position(a:x, a:y + 1), s:get_position(a:x + 1, a:y + 1)]
-    let n = 0
-    for pos in target
-        let n += s:exist_cell(get(a:board, pos, ''))
-        " 隣接数 4～8 は同じ意味なので、打ち切る
-        if 4 <= n
-            return n
+function! s:show(board)
+    let buf = []
+    for i in range(s:WIDTH * s:HEIGHT)
+        call add(buf, s:EMPTY)
+    endfor
+    for pos in keys(a:board)
+        if 0 <= pos && pos < len(buf)
+            let buf[pos] = s:CELL
         endif
     endfor
-    return n
-endfunction
-
-function! s:is_birth(cell, neighbors)
-    return a:cell == s:DEAD && a:neighbors == 3
-endfunction
-
-function! s:is_dead(cell, neighbors)
-    return a:cell == s:LIVE && (a:neighbors != 2 && a:neighbors != 3)
-endfunction
-
-function! s:generation(board, x, y)
-    let pos = s:get_position(a:x, a:y)
-    let cell = a:board[pos]
-    if cell == s:SENTINEL
-        return s:SENTINEL
-    endif
-    let neighbors = s:count_neighbors(a:board, a:x, a:y)
-    "echo 'pos:' . pos . ' cell:' . cell . ' neighbors:' . neighbors . ' x:' . a:x . ' y:' . a:y
-    if s:is_birth(cell, neighbors)
-        return s:LIVE
-    elseif s:is_dead(cell, neighbors)
-        return s:DEAD
-    endif
-    return cell
-endfunction
-
-function! s:forward(board)
-    let forwarded_board = []
     for y in range(s:HEIGHT)
-        for x in range(s:WIDTH)
-            call add(forwarded_board, s:generation(a:board, x, y))
+        let begin = s:get_position(0, y)
+        let end = s:get_position(s:WIDTH-1, y)
+        call setline(y+1, join(buf[begin : end], ''))
+    endfor
+endfunction
+
+function! s:get_exist_cells(board, cells)
+    "存在するセルをリストで返却する"
+    let exists = []
+    for c in a:cells
+        if has_key(a:board, c)
+            call add(exists, c)
+        endif
+        " 4-8 はルール上同じ意味なので抜ける
+        if 4 <= len(exists)
+            return exists
+        endif
+    endfor
+    return exists
+endfunction
+
+function! s:get_neighbors(cell)
+    "周囲8セルのポジションをリストで返却する"
+    let neighbors = []
+    for y in range(-1, 1, 1)
+        for x in range(-1, 1, 1)
+            if 0 == x && 0 == y
+                continue
+            endif
+            call add(neighbors, a:cell + s:get_position(x, y))
         endfor
     endfor
-    return forwarded_board
+    return neighbors
+endfunction
+
+function! s:is_live(cell, board)
+    let neighbors = s:get_neighbors(a:cell)
+    let exists = len(s:get_exist_cells(a:board, neighbors))
+    if 3 == exists
+        return 1
+    endif
+    if len(s:get_exist_cells(a:board, [a:cell]))
+        if 2 <= exists && exists <= 3
+            return 1
+        endif
+    endif
+endfunction
+
+function! s:generation(board)
+    let next_board = {}
+    let memo = {}
+    for origin in keys(a:board)
+        for cell in s:get_neighbors(origin)
+            if (s:WIDTH * s:HEIGHT) <= cell || cell < 0
+                continue
+            endif
+            if has_key(memo, cell)
+                continue
+            endif
+            let is_live = s:is_live(cell, a:board)
+            let memo[cell] = is_live
+            if is_live
+                let next_board[cell] = s:CELL
+            endif
+        endfor
+    endfor
+    return next_board
 endfunction
 
 function! s:sleep(fps)
@@ -118,12 +130,12 @@ function! s:main()
     let board = s:generate_random_board(s:WIDTH, s:HEIGHT)
     for i in range(1, s:MAX_ITERATION, 1)
         let start = reltime()
-        let board = s:forward(board)
-        call s:show_board(board)
         redraw
+        let board = s:generation(board)
+        call s:show(board)
         let elapse = reltimestr(reltime(start))
         let fps = 1.0 / str2float(elapse)
-        echo "iteration: " . i . ", cells: " . len(board) . ", fps: " . string(fps)
         "call s:sleep(s:FPS)
+        echo "iteration: " . i . ", cells: " . len(board) . ", fps: " . string(fps)
     endfor
 endfunction
