@@ -7,8 +7,8 @@ let s:HEIGHT = 20
 let s:FPS = 60
 let s:MAX_ITERATION = 10000
 
-let s:LIVE = '1'
-let s:DEAD = '0'
+let s:LIVE = '*'
+let s:DEAD = ' '
 let s:SENTINEL = '|'
 
 function! s:initialize()
