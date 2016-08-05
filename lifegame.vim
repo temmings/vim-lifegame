@@ -12,7 +12,7 @@ let s:DEAD = ' '
 let s:SENTINEL = '|'
 
 function! s:initialize()
-    new
+    tabnew
     setlocal filetype=lifegame buftype=nofile
     setlocal nolist nocursorline nonumber norelativenumber nowrap
 
